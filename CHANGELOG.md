@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.2.15](https://github.com/monitoring-forge/followparser/compare/v0.2.14...v0.2.15) - 2026-07-28
+
+- ci: bump the dependencies group with 3 updates by @dependabot[bot] in https://github.com/monitoring-forge/followparser/pull/49
+- Add pr-agent.yml by @kazeburo in https://github.com/monitoring-forge/followparser/pull/50
+- add dummyParser comment by @kazeburo in https://github.com/monitoring-forge/followparser/pull/52
+- split Parser for cognitive complexity / get user by euid by @kazeburo in https://github.com/monitoring-forge/followparser/pull/53
+- add verboselog by @kazeburo in https://github.com/monitoring-forge/followparser/pull/54
+- noscan scanfile for ignore complexity warnings by @kazeburo in https://github.com/monitoring-forge/followparser/pull/55
+- test with testify by @kazeburo in https://github.com/monitoring-forge/followparser/pull/56
+
 ## [v0.2.14](https://github.com/monitoring-forge/followparser/compare/v0.2.13...v0.2.14) - 2026-07-17
 
 - Rename module from kazeburo to monitoring-forge by @kazeburo in https://github.com/monitoring-forge/followparser/pull/47
