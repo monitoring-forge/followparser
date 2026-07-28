@@ -141,7 +141,7 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 
 	iterations := 100
 	var mu sync.Mutex
-	var ioErrs []error
+	ioErrs := make([]error, 0)
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < iterations; i++ {
