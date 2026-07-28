@@ -6,8 +6,11 @@ import (
 	"log"
 	"os"
 	"path"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -15,9 +18,7 @@ func init() {
 }
 func TestPosFileRead(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "pos_file_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %s", err)
-	}
+	require.NoError(t, err, "failed to create temp directory")
 	defer os.RemoveAll(tmpDir)
 
 	tests := []struct {
@@ -65,18 +66,11 @@ func TestPosFileRead(t *testing.T) {
 
 			pf := newPosFile(filename)
 			pos, _, fstat, err := pf.read()
-
-			if (err != nil) != tc.expectedError {
-				t.Errorf("Expected error: %v, got: %v", tc.expectedError, err)
-			}
-
-			if pos != tc.expectedPos {
-				t.Errorf("Expected pos: %d, got: %d", tc.expectedPos, pos)
-			}
-
-			if fstat != nil && tc.expectedFStat != nil &&
-				(fstat.Inode != tc.expectedFStat.Inode || fstat.Dev != tc.expectedFStat.Dev) {
-				t.Errorf(`Expected fstat: %+v, got: %+v`, tc.expectedFStat, fstat)
+			require.Equal(t, tc.expectedError, err != nil, "error expectation mismatch")
+			require.Equal(t, tc.expectedPos, pos, "pos expectation mismatch")
+			if fstat != nil && tc.expectedFStat != nil {
+				require.Equal(t, tc.expectedFStat.Inode, fstat.Inode, "inode expectation mismatch")
+				require.Equal(t, tc.expectedFStat.Dev, fstat.Dev, "dev expectation mismatch")
 			}
 
 			// Validate duration within a reasonable time range if needed
@@ -86,9 +80,7 @@ func TestPosFileRead(t *testing.T) {
 
 func TestPosFileWrite(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "pos_file_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %s", err)
-	}
+	require.NoError(t, err, "failed to create temp directory")
 	defer os.RemoveAll(tmpDir)
 
 	tests := []struct {
@@ -113,23 +105,16 @@ func TestPosFileWrite(t *testing.T) {
 			filename := path.Join(tmpDir, "pos_file.json")
 			pf := newPosFile(filename)
 			err := pf.write(tc.pos, tc.fstat)
-
-			if (err != nil) != tc.expectedError {
-				t.Errorf("Expected error: %v, got: %v", tc.expectedError, err)
-			}
+			require.Equal(t, tc.expectedError, err != nil, "error expectation mismatch")
 
 			if !tc.expectedError {
 				content, _ := os.ReadFile(filename)
 				readFPos := &fPos{}
 				json.Unmarshal(content, readFPos)
 
-				if readFPos.Pos != tc.pos {
-					t.Errorf("Expected pos: %d, got: %d", tc.pos, readFPos.Pos)
-				}
-
-				if readFPos.Inode != tc.fstat.Inode || readFPos.Dev != tc.fstat.Dev {
-					t.Errorf("Expected fstat: %+v, got: %+v", tc.fstat, readFPos)
-				}
+				require.Equal(t, tc.pos, readFPos.Pos, "pos expectation mismatch")
+				require.Equal(t, tc.fstat.Inode, readFPos.Inode, "inode expectation mismatch")
+				require.Equal(t, tc.fstat.Dev, readFPos.Dev, "dev expectation mismatch")
 
 				// Validate time within a reasonable range if necessary
 			}
@@ -140,9 +125,7 @@ func TestPosFileWrite(t *testing.T) {
 func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pos_file_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %s", err)
-	}
+	require.NoError(t, err, "failed to create temp directory")
 	defer os.RemoveAll(tmpDir)
 
 	filename := path.Join(tmpDir, "pos_file.json")
@@ -154,17 +137,19 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 		Dev:   6,
 	}
 	err = pf.write(initialPos, initialFStat)
-	if err != nil {
-		t.Fatalf("Failed to write initial data: %s", err)
-	}
+	require.NoError(t, err, "failed to write initial data")
 
 	iterations := 100
+	var mu sync.Mutex
+	ioErrs := make([]error, 0)
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < iterations; i++ {
 			_, _, _, err := pf.read()
 			if err != nil {
-				t.Errorf("read operation failed: %s", err)
+				mu.Lock()
+				ioErrs = append(ioErrs, err)
+				mu.Unlock()
 			}
 			time.Sleep(time.Millisecond)
 		}
@@ -175,10 +160,13 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 		pos := int64(1000 + i)
 		err := pf.write(pos, initialFStat)
 		if err != nil {
-			t.Errorf("write operation failed: %s", err)
+			mu.Lock()
+			ioErrs = append(ioErrs, err)
+			mu.Unlock()
 		}
 		time.Sleep(time.Millisecond)
 	}
 
 	<-done
+	require.Empty(t, ioErrs, "expected no errors during concurrent read/write")
 }
