@@ -192,7 +192,6 @@ func TestParse(t *testing.T) {
 
 	out := parser.Slurp().String()
 	assert.Equal(t, msg3+msg4, out, "read output does not match expected")
-	assert.Equal(t, msg3+msg4, out, "read output does not match expected")
 	assert.GreaterOrEqual(t, parser.duration, 1.0, "duration must be at least 1")
 	assert.Len(t, r, 2, "result len must be 2")
 	assert.Equal(t, 1, r[0].Rows, "result[0].Rows must be 1")
