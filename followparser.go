@@ -68,6 +68,12 @@ func Parse(posFileName, logFile string, cb Callback) error {
 	return err
 }
 
+func (parser *Parser) verboseLog(format string, v ...interface{}) {
+	if !parser.Silent {
+		log.Printf(format, v...)
+	}
+}
+
 func (parser *Parser) parseInit(logFile string) {
 	if parser.WorkDir == "" {
 		parser.WorkDir = os.TempDir()
@@ -94,9 +100,7 @@ func (parser *Parser) parseInit(logFile string) {
 // parseNotRotated handles the parsing of log files that have not been rotated
 func (parser *Parser) parseNotRotated(logFile string, lastPos int64, fstat *fStat) (*Parsed, error) {
 	if fstat.Size < lastPos {
-		if !parser.Silent {
-			log.Println("Detect Truncate")
-		}
+		parser.verboseLog("Detect Truncate: logFile=%s lastPos=%d, currentSize=%d", logFile, lastPos, fstat.Size)
 		// file is truncated, reset lastPos
 		lastPos = 0
 	}
@@ -111,9 +115,7 @@ func (parser *Parser) parseNotRotated(logFile string, lastPos int64, fstat *fSta
 func (parser *Parser) parseRotated(logFile string, lastPos int64, lastFstat *fStat) ([]Parsed, error) {
 	result := make([]Parsed, 0)
 	// rotate found
-	if !parser.Silent {
-		log.Printf("Detect Rotate")
-	}
+	parser.verboseLog("Detect Rotate: logFile=%s lastPos=%d", logFile, lastPos)
 
 	lastFile, err := lastFstat.searchFileByInode(parser.ArchiveDir)
 	if err != nil {
@@ -217,9 +219,7 @@ func (parser *Parser) parseFile(logFile string, lastPos int64, newest bool) (*Pa
 	if err != nil {
 		return nil, fmt.Errorf("failed to inode of log file: %v", err)
 	}
-	if !parser.Silent {
-		log.Printf("Analysis start logFile:%s lastPos:%d Size:%d", logFile, lastPos, fstat.Size)
-	}
+	parser.verboseLog("Analysis start logFile:%s lastPos:%d Size:%d", logFile, lastPos, fstat.Size)
 	if lastPos == 0 && fstat.Size > parser.MaxReadSize {
 		// first time and big logfile
 		lastPos = fstat.Size
@@ -265,9 +265,7 @@ func (parser *Parser) parseFile(logFile string, lastPos int64, newest bool) (*Pa
 		EndPos:   curPos,
 		Rows:     rows,
 	}
-	if !parser.Silent {
-		log.Printf("Analysis completed logFile:%s startPos:%d endPos:%d Rows:%d", logFile, lastPos, curPos, rows)
-	}
+	parser.verboseLog("Analysis completed logFile:%s startPos:%d endPos:%d Rows:%d", logFile, lastPos, curPos, rows)
 
 	return parsed, nil
 }
