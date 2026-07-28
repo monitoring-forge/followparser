@@ -7,9 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/user"
 	"path/filepath"
-	"strconv"
 )
 
 var (
@@ -159,29 +157,13 @@ func (parser *Parser) parseRotated(logFile string, lastPos int64, lastFstat *fSt
 }
 
 func currentUserID() int {
-	curUid := os.Geteuid()
-	if curUid == -1 {
-		// when os.Geteuid() fails, fallback to using the current user's UID
-		user, err := user.Current()
-		if err != nil {
-			// fallback to 0 if unable to get effective user ID
-			return 0
-		}
-		num, err := strconv.Atoi(user.Uid)
-		if err != nil {
-			return 0
-		}
-		curUid = num
-	}
-	return curUid
+	return max(os.Geteuid(), 0)
 }
 
 func (parser *Parser) Parse(posFileName, logFile string) ([]Parsed, error) {
 	parser.parseInit(logFile)
 
-	curUid := currentUserID()
-
-	parser.posFile = newPosFile(filepath.Join(parser.WorkDir, fmt.Sprintf("%s-%d", posFileName, curUid)))
+	parser.posFile = newPosFile(filepath.Join(parser.WorkDir, fmt.Sprintf("%s-%d", posFileName, currentUserID())))
 	lastPos, duration, lastFstat, err := parser.posFile.read()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pos file :%v", err)
@@ -193,23 +175,23 @@ func (parser *Parser) Parse(posFileName, logFile string) ([]Parsed, error) {
 	}
 	result := make([]Parsed, 0)
 	if fstat.isNotRotated(lastFstat) {
-		parsed, err := parser.parseNotRotated(
+		parsed, parseErr := parser.parseNotRotated(
 			logFile,
 			lastPos,
 			fstat,
 		)
-		if err != nil {
-			return nil, err
+		if parseErr != nil {
+			return nil, parseErr
 		}
 		result = append(result, *parsed)
 	} else {
-		parsedList, err := parser.parseRotated(
+		parsedList, parseErr := parser.parseRotated(
 			logFile,
 			lastPos,
 			lastFstat,
 		)
-		if err != nil {
-			return nil, err
+		if parseErr != nil {
+			return nil, parseErr
 		}
 		result = append(result, parsedList...)
 	}
