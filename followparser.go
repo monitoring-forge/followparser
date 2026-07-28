@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"os/user"
 	"path/filepath"
 )
 
@@ -69,7 +68,7 @@ func Parse(posFileName, logFile string, cb Callback) error {
 	return err
 }
 
-func (parser *Parser) Parse(posFileName, logFile string) ([]Parsed, error) {
+func (parser *Parser) parseInit(logFile string) {
 	if parser.WorkDir == "" {
 		parser.WorkDir = os.TempDir()
 	}
@@ -90,13 +89,81 @@ func (parser *Parser) Parse(posFileName, logFile string) ([]Parsed, error) {
 	if parser.ArchiveDir == "" {
 		parser.ArchiveDir = filepath.Dir(logFile)
 	}
-	curUser, _ := user.Current()
-	uid := "0"
-	if curUser != nil {
-		uid = curUser.Uid
+}
+
+// parseNotRotated handles the parsing of log files that have not been rotated
+func (parser *Parser) parseNotRotated(logFile string, lastPos int64, fstat *fStat) (*Parsed, error) {
+	if fstat.Size < lastPos {
+		if !parser.Silent {
+			log.Println("Detect Truncate")
+		}
+		// file is truncated, reset lastPos
+		lastPos = 0
+	}
+	return parser.parseFile(
+		logFile,
+		lastPos,
+		true,
+	)
+}
+
+// parseRotated handles the parsing of log files that have been rotate
+func (parser *Parser) parseRotated(logFile string, lastPos int64, lastFstat *fStat) ([]Parsed, error) {
+	result := make([]Parsed, 0)
+	// rotate found
+	if !parser.Silent {
+		log.Printf("Detect Rotate")
 	}
 
-	parser.posFile = newPosFile(filepath.Join(parser.WorkDir, fmt.Sprintf("%s-%s", posFileName, uid)))
+	lastFile, err := lastFstat.searchFileByInode(parser.ArchiveDir)
+	if err != nil {
+		// new file only
+		log.Printf("Could not search previous file :%v", err)
+		parsed, parseErr := parser.parseFile(
+			logFile,
+			0, // lastPos
+			true,
+		)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+		result = append(result, *parsed)
+		return result, nil
+	}
+
+	// previous file found, parse previous file and new file
+	parsed, parseErr := parser.parseFile(
+		lastFile,
+		lastPos,
+		false, // no update posfile
+	)
+	if parseErr != nil {
+		log.Printf("Could not parse previous file :%v", parseErr)
+	}
+	if parsed != nil {
+		result = append(result, *parsed)
+	}
+	// new file
+	parsed, parseErr = parser.parseFile(
+		logFile,
+		0, // lastPos
+		true,
+	)
+	if parseErr != nil {
+		return nil, parseErr
+	}
+	result = append(result, *parsed)
+	return result, nil
+}
+
+func currentUserID() int {
+	return max(os.Geteuid(), 0)
+}
+
+func (parser *Parser) Parse(posFileName, logFile string) ([]Parsed, error) {
+	parser.parseInit(logFile)
+
+	parser.posFile = newPosFile(filepath.Join(parser.WorkDir, fmt.Sprintf("%s-%d", posFileName, currentUserID())))
 	lastPos, duration, lastFstat, err := parser.posFile.read()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pos file :%v", err)
@@ -108,64 +175,25 @@ func (parser *Parser) Parse(posFileName, logFile string) ([]Parsed, error) {
 	}
 	result := make([]Parsed, 0)
 	if fstat.isNotRotated(lastFstat) {
-		if fstat.Size < lastPos {
-			if !parser.Silent {
-				log.Println("Detect Truncate")
-			}
-			// file is truncated, reset lastPos
-			lastPos = 0
-		}
-		parsed, err := parser.parseFile(
+		parsed, parseErr := parser.parseNotRotated(
 			logFile,
 			lastPos,
-			true,
+			fstat,
 		)
-		if err != nil {
-			return nil, err
+		if parseErr != nil {
+			return nil, parseErr
 		}
 		result = append(result, *parsed)
 	} else {
-		// rotate found
-		if !parser.Silent {
-			log.Printf("Detect Rotate")
+		parsedList, parseErr := parser.parseRotated(
+			logFile,
+			lastPos,
+			lastFstat,
+		)
+		if parseErr != nil {
+			return nil, parseErr
 		}
-		lastFile, err := lastFstat.searchFileByInode(parser.ArchiveDir)
-		if err != nil {
-			log.Printf("Could not search previous file :%v", err)
-			// new file only
-			parsed, err := parser.parseFile(
-				logFile,
-				0, // lastPos
-				true,
-			)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, *parsed)
-		} else {
-			// previous file
-			parsed, err := parser.parseFile(
-				lastFile,
-				lastPos,
-				false, // no update posfile
-			)
-			if err != nil {
-				log.Printf("Could not parse previous file :%v", err)
-			}
-			if parsed != nil {
-				result = append(result, *parsed)
-			}
-			// new file
-			parsed, err = parser.parseFile(
-				logFile,
-				0, // lastPos
-				true,
-			)
-			if err != nil {
-				return nil, err
-			}
-			result = append(result, *parsed)
-		}
+		result = append(result, parsedList...)
 	}
 
 	parser.Callback.Finish(duration)
