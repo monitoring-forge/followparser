@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -143,7 +144,7 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 	go func() {
 		for i := 0; i < iterations; i++ {
 			_, _, _, err := pf.read()
-			require.NoError(t, err, "read operation failed")
+			assert.NoError(t, err, "read operation failed")
 			time.Sleep(time.Millisecond)
 		}
 		close(done)
