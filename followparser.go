@@ -281,6 +281,8 @@ func (parser *Parser) CommitPosFile() error {
 	return nil
 }
 
+// Ignore code complexity warning for this function, as it is a core part of the log parsing logic.
+// BEGIN-NOSCAN
 func (parser *Parser) scanFile(f io.Reader, newest bool) (int, int64, error) {
 	scan := 0
 	read := int64(0)
@@ -376,3 +378,5 @@ func (parser *Parser) scanFile(f io.Reader, newest bool) (int, int64, error) {
 		// otherwise there was at least one newline and possibly leftover, continue reading
 	}
 }
+
+// END-NOSCAN
