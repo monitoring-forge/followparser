@@ -7,7 +7,9 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 )
 
 var (
@@ -114,51 +116,70 @@ func (parser *Parser) parseRotated(logFile string, lastPos int64, lastFstat *fSt
 	if !parser.Silent {
 		log.Printf("Detect Rotate")
 	}
+
 	lastFile, err := lastFstat.searchFileByInode(parser.ArchiveDir)
 	if err != nil {
-		log.Printf("Could not search previous file :%v", err)
 		// new file only
-		parsed, err := parser.parseFile(
+		log.Printf("Could not search previous file :%v", err)
+		parsed, parseErr := parser.parseFile(
 			logFile,
 			0, // lastPos
 			true,
 		)
-		if err != nil {
-			return nil, err
+		if parseErr != nil {
+			return nil, parseErr
 		}
 		result = append(result, *parsed)
 		return result, nil
-	} else {
-		// previous file
-		parsed, err := parser.parseFile(
-			lastFile,
-			lastPos,
-			false, // no update posfile
-		)
-		if err != nil {
-			log.Printf("Could not parse previous file :%v", err)
-		}
-		if parsed != nil {
-			result = append(result, *parsed)
-		}
-		// new file
-		parsed, err = parser.parseFile(
-			logFile,
-			0, // lastPos
-			true,
-		)
-		if err != nil {
-			return nil, err
-		}
+	}
+
+	// previous file found, parse previous file and new file
+	parsed, parseErr := parser.parseFile(
+		lastFile,
+		lastPos,
+		false, // no update posfile
+	)
+	if parseErr != nil {
+		log.Printf("Could not parse previous file :%v", parseErr)
+	}
+	if parsed != nil {
 		result = append(result, *parsed)
 	}
+	// new file
+	parsed, parseErr = parser.parseFile(
+		logFile,
+		0, // lastPos
+		true,
+	)
+	if parseErr != nil {
+		return nil, parseErr
+	}
+	result = append(result, *parsed)
 	return result, nil
+}
+
+func currentUserID() int {
+	curUid := os.Geteuid()
+	if curUid == -1 {
+		// when os.Geteuid() fails, fallback to using the current user's UID
+		user, err := user.Current()
+		if err != nil {
+			// fallback to 0 if unable to get effective user ID
+			return 0
+		}
+		num, err := strconv.Atoi(user.Uid)
+		if err != nil {
+			return 0
+		}
+		curUid = num
+	}
+	return curUid
 }
 
 func (parser *Parser) Parse(posFileName, logFile string) ([]Parsed, error) {
 	parser.parseInit(logFile)
 
-	curUid := os.Geteuid()
+	curUid := currentUserID()
 
 	parser.posFile = newPosFile(filepath.Join(parser.WorkDir, fmt.Sprintf("%s-%d", posFileName, curUid)))
 	lastPos, duration, lastFstat, err := parser.posFile.read()
