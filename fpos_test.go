@@ -6,10 +6,10 @@ import (
 	"log"
 	"os"
 	"path"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -140,11 +140,17 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 	require.NoError(t, err, "failed to write initial data")
 
 	iterations := 100
+	var mu sync.Mutex
+	var ioErrs []error
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < iterations; i++ {
 			_, _, _, err := pf.read()
-			assert.NoError(t, err, "read operation failed")
+			if err != nil {
+				mu.Lock()
+				ioErrs = append(ioErrs, err)
+				mu.Unlock()
+			}
 			time.Sleep(time.Millisecond)
 		}
 		close(done)
@@ -153,9 +159,14 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 	for i := 0; i < iterations; i++ {
 		pos := int64(1000 + i)
 		err := pf.write(pos, initialFStat)
-		require.NoError(t, err, "write operation failed")
+		if err != nil {
+			mu.Lock()
+			ioErrs = append(ioErrs, err)
+			mu.Unlock()
+		}
 		time.Sleep(time.Millisecond)
 	}
 
 	<-done
+	require.Empty(t, ioErrs, "expected no errors during concurrent read/write")
 }
