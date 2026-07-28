@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type testParser struct {
@@ -140,9 +142,8 @@ func TestParse(t *testing.T) {
 	tmpdir := t.TempDir()
 	logFileName := filepath.Join(tmpdir, "log")
 	fh, err := os.Create(logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to create log file")
+
 	for i := 0; i < 2; i++ {
 		buf := bytes.NewBufferString("")
 		parser := &testParser{
@@ -160,18 +161,10 @@ func TestParse(t *testing.T) {
 			t.Error(err)
 		}
 		out := parser.Slurp().String()
-		if out != msg {
-			t.Errorf("read '%s' not match expect '%s'", out, msg)
-		}
-		if len(r) != 1 {
-			t.Errorf("result len must be 1 %v", r)
-		}
-		if r[0].Rows != 1 {
-			t.Errorf("result[0].Rows must be 1 %v", r)
-		}
-		if r[0].EndPos-r[0].StartPos != 17 {
-			t.Errorf("r[0].EndPos - r[0].StartPos must be 17 %v", r[0])
-		}
+		assert.Equal(t, msg, out, "read output does not match expected")
+		assert.Len(t, r, 1, "result len must be 1")
+		assert.Equal(t, 1, r[0].Rows, "result[0].Rows must be 1")
+		assert.Equal(t, int64(17), r[0].EndPos-r[0].StartPos, "r[0].EndPos - r[0].StartPos must be 17")
 	}
 
 	time.Sleep(time.Second)
@@ -180,9 +173,8 @@ func TestParse(t *testing.T) {
 	fh.Close()
 	os.Rename(logFileName, filepath.Join(tmpdir, "log.1"))
 	fh, err = os.Create(logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to create new log file")
+
 	msg4 := fmt.Sprintf("msg msg %08d\n", 4)
 	fh.WriteString(msg4)
 	buf := bytes.NewBufferString("")
@@ -196,52 +188,38 @@ func TestParse(t *testing.T) {
 		Silent:   true,
 	}
 	r, err := fp.Parse("logPos", logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to parse log file")
+
 	out := parser.Slurp().String()
-	if out != msg3+msg4 {
-		t.Errorf("read '%s' not match expect '%s'", out, msg3+msg4)
-	}
-	if parser.duration < 1 {
-		t.Errorf("duration: %f", parser.duration)
-	}
-	if len(r) != 2 {
-		t.Errorf("result len must be 2 %v", r)
-	}
-	if r[0].Rows != 1 {
-		t.Errorf("result[0].Rows must be 1 %v", r)
-	}
-	if r[1].Rows != 1 {
-		t.Errorf("result[1].Rows must be 1 %v", r)
-	}
+	assert.Equal(t, msg3+msg4, out, "read output does not match expected")
+	assert.Equal(t, msg3+msg4, out, "read output does not match expected")
+	assert.GreaterOrEqual(t, parser.duration, 1.0, "duration must be at least 1")
+	assert.Len(t, r, 2, "result len must be 2")
+	assert.Equal(t, 1, r[0].Rows, "result[0].Rows must be 1")
+	assert.Equal(t, 1, r[1].Rows, "result[1].Rows must be 1")
 
 	// --- Archive directory move test starts here ---
 	archiveDir := filepath.Join(tmpdir, "archive")
 	err = os.Mkdir(archiveDir, 0755)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to create archive directory")
+
 	// Append to the log file
 	fh.Close()
 	fh, err = os.OpenFile(logFileName, os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to open log file for appending")
+
 	msg5 := fmt.Sprintf("msg msg %08d\n", 5)
 	fh.WriteString(msg5)
 	fh.Close()
 	// Move log file to archive directory
 	archivedLog := filepath.Join(archiveDir, "log.2")
 	err = os.Rename(logFileName, archivedLog)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to move log file to archive directory")
+
 	// Create a new log file and write to it
 	fh, err = os.Create(logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to create new log file")
+
 	msg6 := fmt.Sprintf("msg msg %08d\n", 6)
 	fh.WriteString(msg6)
 	fh.Close()
@@ -257,31 +235,20 @@ func TestParse(t *testing.T) {
 		Silent:     true,
 	}
 	r, err = fp.Parse("logPos", logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to parse log file after archive move")
+
 	out = parser.Slurp().String()
-	if out != msg5+msg6 {
-		t.Errorf("archive follow read '%s' not match expect '%s'", out, msg5+msg6)
-	}
-	if len(r) != 2 {
-		t.Errorf("archive follow result len must be 2 %v", r)
-	}
-	if r[0].Rows != 1 {
-		t.Errorf("archive follow result[0].Rows must be 1 %v", r[0].Rows)
-	}
-	if r[1].Rows != 1 {
-		t.Errorf("archive follow result[1].Rows must be 1 %v", r[1].Rows)
-	}
+	assert.Equal(t, msg5+msg6, out, "archive follow read output does not match expected")
+	assert.Len(t, r, 2, "archive follow result len must be 2")
+	assert.Equal(t, 1, r[0].Rows, "archive follow result[0].Rows must be 1")
+	assert.Equal(t, 1, r[1].Rows, "archive follow result[1].Rows must be 1")
 }
 
 func TestParseWithNoCommitPosFile(t *testing.T) {
 	tmpdir := t.TempDir()
 	logFileName := filepath.Join(tmpdir, "log")
 	fh, err := os.Create(logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to create log file")
 
 	lastmsg := ""
 	var fp *Parser
@@ -300,27 +267,17 @@ func TestParseWithNoCommitPosFile(t *testing.T) {
 			NoAutoCommitPosFile: true,
 		}
 		r, err := fp.Parse("logPos", logFileName)
-		if err != nil {
-			t.Error(err)
-		}
+		assert.NoError(t, err, "failed to parse log file with NoAutoCommitPosFile")
+
 		out := parser.Slurp().String()
-		if out != lastmsg {
-			t.Errorf("read '%s' not match expect '%s'", out, lastmsg)
-		}
-		if len(r) != 1 {
-			t.Errorf("result len must be 1 %v", len(r))
-		}
-		if r[0].Rows != i+1 {
-			t.Errorf("result[0].Rows must be i+1 %v i=%d", r[0].Rows, i)
-		}
-		if r[0].EndPos-r[0].StartPos != int64(17*(i+1)) {
-			t.Errorf("r[0].EndPos - r[0].StartPos must be 17*(i+1) %v i=%d", r[0].EndPos-r[0].StartPos, i)
-		}
+		assert.Equal(t, lastmsg, out, "read output does not match expected")
+		assert.Len(t, r, 1, "result len must be 1")
+		assert.Equal(t, i+1, r[0].Rows, "result[0].Rows must be i+1")
+		assert.Equal(t, int64(17*(i+1)), r[0].EndPos-r[0].StartPos, "r[0].EndPos - r[0].StartPos must be 17*(i+1)")
 	}
 	errCommit := fp.CommitPosFile()
-	if errCommit != nil {
-		t.Error(errCommit)
-	}
+	assert.NoError(t, errCommit, "failed to commit pos file")
+
 	{
 		buf := bytes.NewBufferString("")
 		parser := &testParser{
@@ -335,23 +292,13 @@ func TestParseWithNoCommitPosFile(t *testing.T) {
 			NoAutoCommitPosFile: false,
 		}
 		r, err := fp.Parse("logPos", logFileName)
-		if err != nil {
-			t.Error(err)
-		}
-		out := parser.Slurp().String()
-		if out != msg3 {
-			t.Errorf("read '%s' not match expect '%s'", out, msg3)
-		}
-		if len(r) != 1 {
-			t.Errorf("result len must be 1 %v", len(r))
-		}
-		if r[0].Rows != 1 {
-			t.Errorf("result[0].Rows must be 1 %v", r[0].Rows)
-		}
-		if r[0].EndPos-r[0].StartPos != 17 {
-			t.Errorf("r[0].EndPos - r[0].StartPos must be 17 %v", r[0].EndPos-r[0].StartPos)
-		}
+		assert.NoError(t, err, "failed to parse log file after committing pos file")
 
+		out := parser.Slurp().String()
+		assert.Equal(t, msg3, out, "read output does not match expected")
+		assert.Len(t, r, 1, "result len must be 1")
+		assert.Equal(t, 1, r[0].Rows, "result[0].Rows must be 1")
+		assert.Equal(t, int64(17), r[0].EndPos-r[0].StartPos, "r[0].EndPos - r[0].StartPos must be 17")
 	}
 }
 
@@ -361,9 +308,7 @@ func TestParseAppendAfterNoTrailingNewline(t *testing.T) {
 	tmpdir := t.TempDir()
 	logFileName := filepath.Join(tmpdir, "log")
 	fh, err := os.Create(logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to create log file")
 
 	// write a line without a trailing newline
 	previousMsg := fmt.Sprintf("msg msg %08d\n", 7)
@@ -371,9 +316,7 @@ func TestParseAppendAfterNoTrailingNewline(t *testing.T) {
 	previousMsg += fmt.Sprintf("msg msg %08d\n", 9)
 	msgNoNLBefore := "msg "
 	_, err = fh.WriteString(previousMsg + msgNoNLBefore)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to write initial content to log file")
 	fh.Sync()
 
 	// First parse: should read the existing line (even without newline)
@@ -385,28 +328,20 @@ func TestParseAppendAfterNoTrailingNewline(t *testing.T) {
 		Silent:   true,
 	}
 	r, err := fp.Parse("logPosNoNL", logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to parse log file with no trailing newline")
+
 	out := parser.Slurp().String()
-	if out != previousMsg {
-		t.Fatalf("first read '%s' not match expect '%s'", out, previousMsg)
-	}
-	if len(r) != 1 {
-		t.Fatalf("first result len must be 1 %v", r)
-	}
+	assert.Equal(t, previousMsg, out, "first read output does not match expected")
+	assert.Len(t, r, 1, "first result len must be 1")
 
 	// Append new content (with newline) to the same file
 	fh, err = os.OpenFile(logFileName, os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to open log file for appending")
+
 	msgNoNLAfter := fmt.Sprintf("msg %08d\n", 10)
 	msgAppend := fmt.Sprintf("msg msg %08d\n", 11)
 	_, err = fh.WriteString(msgNoNLAfter + msgAppend)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to write appended content to log file")
 	fh.Close()
 
 	// Second parse using same pos file name: should read only appended content
@@ -418,16 +353,11 @@ func TestParseAppendAfterNoTrailingNewline(t *testing.T) {
 		Silent:   true,
 	}
 	r2, err := fp2.Parse("logPosNoNL", logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to parse log file after appending content")
+
 	out2 := parser2.Slurp().String()
-	if out2 != msgNoNLBefore+msgNoNLAfter+msgAppend {
-		t.Fatalf("second read '%s' not match expect '%s'", out2, msgNoNLBefore+msgNoNLAfter+msgAppend)
-	}
-	if len(r2) != 1 {
-		t.Fatalf("second result len must be 1 %v", r2)
-	}
+	assert.Equal(t, msgNoNLBefore+msgNoNLAfter+msgAppend, out2, "second read output does not match expected")
+	assert.Len(t, r2, 1, "second result len must be 1")
 }
 
 // Test a single line longer than DefaultStartBufSize is read properly
@@ -435,18 +365,15 @@ func TestParseSingleLongLine(t *testing.T) {
 	tmpdir := t.TempDir()
 	logFileName := filepath.Join(tmpdir, "log")
 	fh, err := os.Create(logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to create log file")
 	// create a single long line > DefaultStartBufSize
 	longLen := DefaultStartBufSize + 100
 	data := bytes.Repeat([]byte("A"), longLen)
 	// ensure newline at end so Scanner treats it as a line
 	_, err = fh.Write(data)
-	if err != nil {
-		t.Error(err)
-	}
-	fh.WriteString("\n")
+	assert.NoError(t, err, "failed to write long line to log file")
+	_, err = fh.WriteString("\n")
+	assert.NoError(t, err, "failed to write newline to log file")
 	fh.Close()
 
 	buf := bytes.NewBufferString("")
@@ -462,18 +389,10 @@ func TestParseSingleLongLine(t *testing.T) {
 	}
 	out := parser.Slurp().String()
 	expected := string(data) + "\n"
-	if out != expected {
-		t.Fatalf("read length %d not match expect %d", len(out), len(expected))
-	}
-	if len(r) != 1 {
-		t.Fatalf("result len must be 1 %v", r)
-	}
-	if r[0].Rows != 1 {
-		t.Fatalf("result[0].Rows must be 1 %v", r[0].Rows)
-	}
-	if r[0].EndPos-r[0].StartPos != int64(len(expected)) {
-		t.Fatalf("r[0].EndPos - r[0].StartPos must be %d %v", len(expected), r[0])
-	}
+	assert.Equal(t, expected, out, "read output does not match expected")
+	assert.Len(t, r, 1, "result len must be 1")
+	assert.Equal(t, 1, r[0].Rows, "result[0].Rows must be 1")
+	assert.Equal(t, int64(len(expected)), r[0].EndPos-r[0].StartPos, "r[0].EndPos - r[0].StartPos must be len(expected)")
 }
 
 // Test rotate: old (archived) file's last line has no trailing newline
@@ -482,48 +401,40 @@ func TestRotateReadOldFileWithNoTrailingNewline(t *testing.T) {
 	tmpdir := t.TempDir()
 	logFileName := filepath.Join(tmpdir, "log")
 	fh, err := os.Create(logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to create log file")
+
 	// write first line with newline and parse to set pos file
 	msg1 := fmt.Sprintf("msg msg %08d\n", 30)
-	fh.WriteString(msg1)
+	_, err = fh.WriteString(msg1)
+	assert.NoError(t, err, "failed to write first line to log file")
 	fh.Sync()
 
 	buf := bytes.NewBufferString("")
 	parser := &testParser{buf: buf}
 	fp := &Parser{WorkDir: tmpdir, Callback: parser, Silent: true}
 	r, err := fp.Parse("logPosRotateNoNL", logFileName)
-	if err != nil {
-		t.Error(err)
-	}
-	if len(r) != 1 {
-		t.Fatalf("initial parse result len must be 1 %v", r)
-	}
+	assert.NoError(t, err, "failed to parse log file after first write")
+	assert.Len(t, r, 1, "initial parse result len must be 1")
 
 	// append a line WITHOUT trailing newline
 	msg2 := fmt.Sprintf("msg msg %08d", 31)
 	fh, err = os.OpenFile(logFileName, os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		t.Error(err)
-	}
-	fh.WriteString(msg2)
+	assert.NoError(t, err, "failed to open log file for appending")
+	_, err = fh.WriteString(msg2)
+	assert.NoError(t, err, "failed to write second line to log file")
 	fh.Close()
 
 	// rotate the log (rename to archive)
 	archived := filepath.Join(tmpdir, "log.1")
 	err = os.Rename(logFileName, archived)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to rotate log file")
 
 	// create a new log file and write another line
 	fh, err = os.Create(logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to create new log file")
 	msg3 := fmt.Sprintf("msg msg %08d\n", 32)
-	fh.WriteString(msg3)
+	_, err = fh.WriteString(msg3)
+	assert.NoError(t, err, "failed to write third line to log file")
 	fh.Close()
 
 	// parse again: it should find the archived file and read msg2 (no newline)
@@ -531,34 +442,28 @@ func TestRotateReadOldFileWithNoTrailingNewline(t *testing.T) {
 	parser2 := &testParser{buf: buf2}
 	fp2 := &Parser{WorkDir: tmpdir, Callback: parser2, Silent: true}
 	r2, err := fp2.Parse("logPosRotateNoNL", logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to parse log file after rotation")
+
 	out := parser2.Slurp().String()
 	expected := msg2 + "\n" + msg3
-	if out != expected {
-		t.Fatalf("rotate read '%s' not match expect '%s'", out, expected)
-	}
-	if len(r2) != 2 {
-		t.Fatalf("rotate result len must be 2 %v", r2)
-	}
-	if r2[0].Rows != 1 || r2[1].Rows != 1 {
-		t.Fatalf("rotate rows must be 1 each %v", r2)
-	}
+	assert.Equal(t, expected, out, "rotate read output does not match expected")
+	assert.Len(t, r2, 2, "rotate result len must be 2")
+	assert.Equal(t, 1, r2[0].Rows, "rotate result[0].Rows must be 1")
+	assert.Equal(t, 1, r2[1].Rows, "rotate result[1].Rows must be 1")
 }
 
 func TestTruncated(t *testing.T) {
 	tmpdir := t.TempDir()
 	logFileName := filepath.Join(tmpdir, "truncate-log")
 	fh, err := os.Create(logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to create log file")
+
 	// write initial lines
 	var lines = 10
 	for i := 0; i < lines; i++ {
 		msg := fmt.Sprintf("msg msg %08d\n", i)
-		fh.WriteString(msg)
+		_, err = fh.WriteString(msg)
+		assert.NoError(t, err, "failed to write initial content to log file")
 	}
 	fh.Sync()
 
@@ -566,15 +471,9 @@ func TestTruncated(t *testing.T) {
 	parser := &testParser{buf: buf}
 	fp := &Parser{WorkDir: tmpdir, Callback: parser, Silent: true}
 	r, err := fp.Parse("logPosTruncateNoNL", logFileName)
-	if err != nil {
-		t.Error(err)
-	}
-	if len(r) != 1 {
-		t.Fatalf("initial parse result len must be %d %v", 1, r)
-	}
-	if r[0].Rows != lines {
-		t.Fatalf("initial parse result rows must be %d %v", lines, r[0].Rows)
-	}
+	assert.NoError(t, err, "failed to parse log file after initial write")
+	assert.Equal(t, 1, len(r), "initial parse result len must be equal to 1")
+	assert.Equal(t, lines, r[0].Rows, "initial parse result rows must be equal to lines")
 	fh.Close()
 
 	// truncate the log
@@ -588,7 +487,8 @@ func TestTruncated(t *testing.T) {
 		t.Error(err)
 	}
 	msg3 := fmt.Sprintf("msg msg %08d\n", 32)
-	fh.WriteString(msg3)
+	_, err = fh.WriteString(msg3)
+	assert.NoError(t, err, "failed to write new line to log file")
 	fh.Close()
 
 	// parse again: it should be truncated and read only the new line
@@ -596,19 +496,11 @@ func TestTruncated(t *testing.T) {
 	parser2 := &testParser{buf: buf2}
 	fp2 := &Parser{WorkDir: tmpdir, Callback: parser2, Silent: false}
 	r2, err := fp2.Parse("logPosTruncateNoNL", logFileName)
-	if err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err, "failed to parse log file after truncation")
 
 	out := parser2.Slurp().String()
 	expected := msg3
-	if out != expected {
-		t.Fatalf("truncated read '%s' not match expect '%s'", out, expected)
-	}
-	if len(r2) != 1 {
-		t.Fatalf("truncated result len must be 1 %v", r2)
-	}
-	if r2[0].Rows != 1 {
-		t.Fatalf("truncated rows must be 1 each %v", r2)
-	}
+	assert.Equal(t, expected, out, "truncated read output does not match expected")
+	assert.Len(t, r2, 1, "truncated result len must be 1")
+	assert.Equal(t, 1, r2[0].Rows, "truncated result[0].Rows must be 1")
 }
