@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -17,7 +17,7 @@ func init() {
 }
 func TestPosFileRead(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "pos_file_test")
-	assert.NoError(t, err, "failed to create temp directory")
+	require.NoError(t, err, "failed to create temp directory")
 	defer os.RemoveAll(tmpDir)
 
 	tests := []struct {
@@ -65,11 +65,11 @@ func TestPosFileRead(t *testing.T) {
 
 			pf := newPosFile(filename)
 			pos, _, fstat, err := pf.read()
-			assert.Equal(t, tc.expectedError, err != nil, "error expectation mismatch")
-			assert.Equal(t, tc.expectedPos, pos, "pos expectation mismatch")
+			require.Equal(t, tc.expectedError, err != nil, "error expectation mismatch")
+			require.Equal(t, tc.expectedPos, pos, "pos expectation mismatch")
 			if fstat != nil && tc.expectedFStat != nil {
-				assert.Equal(t, tc.expectedFStat.Inode, fstat.Inode, "inode expectation mismatch")
-				assert.Equal(t, tc.expectedFStat.Dev, fstat.Dev, "dev expectation mismatch")
+				require.Equal(t, tc.expectedFStat.Inode, fstat.Inode, "inode expectation mismatch")
+				require.Equal(t, tc.expectedFStat.Dev, fstat.Dev, "dev expectation mismatch")
 			}
 
 			// Validate duration within a reasonable time range if needed
@@ -79,7 +79,7 @@ func TestPosFileRead(t *testing.T) {
 
 func TestPosFileWrite(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "pos_file_test")
-	assert.NoError(t, err, "failed to create temp directory")
+	require.NoError(t, err, "failed to create temp directory")
 	defer os.RemoveAll(tmpDir)
 
 	tests := []struct {
@@ -104,16 +104,16 @@ func TestPosFileWrite(t *testing.T) {
 			filename := path.Join(tmpDir, "pos_file.json")
 			pf := newPosFile(filename)
 			err := pf.write(tc.pos, tc.fstat)
-			assert.Equal(t, tc.expectedError, err != nil, "error expectation mismatch")
+			require.Equal(t, tc.expectedError, err != nil, "error expectation mismatch")
 
 			if !tc.expectedError {
 				content, _ := os.ReadFile(filename)
 				readFPos := &fPos{}
 				json.Unmarshal(content, readFPos)
 
-				assert.Equal(t, tc.pos, readFPos.Pos, "pos expectation mismatch")
-				assert.Equal(t, tc.fstat.Inode, readFPos.Inode, "inode expectation mismatch")
-				assert.Equal(t, tc.fstat.Dev, readFPos.Dev, "dev expectation mismatch")
+				require.Equal(t, tc.pos, readFPos.Pos, "pos expectation mismatch")
+				require.Equal(t, tc.fstat.Inode, readFPos.Inode, "inode expectation mismatch")
+				require.Equal(t, tc.fstat.Dev, readFPos.Dev, "dev expectation mismatch")
 
 				// Validate time within a reasonable range if necessary
 			}
@@ -124,7 +124,7 @@ func TestPosFileWrite(t *testing.T) {
 func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pos_file_test")
-	assert.NoError(t, err, "failed to create temp directory")
+	require.NoError(t, err, "failed to create temp directory")
 	defer os.RemoveAll(tmpDir)
 
 	filename := path.Join(tmpDir, "pos_file.json")
@@ -136,14 +136,14 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 		Dev:   6,
 	}
 	err = pf.write(initialPos, initialFStat)
-	assert.NoError(t, err, "failed to write initial data")
+	require.NoError(t, err, "failed to write initial data")
 
 	iterations := 100
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < iterations; i++ {
 			_, _, _, err := pf.read()
-			assert.NoError(t, err, "read operation failed")
+			require.NoError(t, err, "read operation failed")
 			time.Sleep(time.Millisecond)
 		}
 		close(done)
@@ -152,7 +152,7 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 	for i := 0; i < iterations; i++ {
 		pos := int64(1000 + i)
 		err := pf.write(pos, initialFStat)
-		assert.NoError(t, err, "write operation failed")
+		require.NoError(t, err, "write operation failed")
 		time.Sleep(time.Millisecond)
 	}
 
