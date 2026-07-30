@@ -68,7 +68,7 @@ func Parse(posFileName, logFile string, cb Callback) error {
 	return err
 }
 
-func (parser *Parser) verboseLog(format string, v ...interface{}) {
+func (parser *Parser) verboseLog(format string, v ...any) {
 	if !parser.Silent {
 		log.Printf(format, v...)
 	}
@@ -168,12 +168,12 @@ func (parser *Parser) Parse(posFileName, logFile string) ([]Parsed, error) {
 	parser.posFile = newPosFile(filepath.Join(parser.WorkDir, fmt.Sprintf("%s-%d", posFileName, currentUserID())))
 	lastPos, duration, lastFstat, err := parser.posFile.read()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load pos file :%v", err)
+		return nil, fmt.Errorf("failed to load pos file :%w", err)
 	}
 
 	fstat, err := fileStat(logFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get inode from log file :%v", err)
+		return nil, fmt.Errorf("failed to get inode from log file :%w", err)
 	}
 	result := make([]Parsed, 0)
 	if fstat.isNotRotated(lastFstat) {
@@ -217,7 +217,7 @@ func (parser *Parser) parseFile(logFile string, lastPos int64, newest bool) (*Pa
 
 	fstat, err := fileStat(logFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to inode of log file: %v", err)
+		return nil, fmt.Errorf("failed to get inode of log file: %w", err)
 	}
 	parser.verboseLog("Analysis start logFile:%s lastPos:%d Size:%d", logFile, lastPos, fstat.Size)
 	if lastPos == 0 && fstat.Size > parser.MaxReadSize {
@@ -232,17 +232,17 @@ func (parser *Parser) parseFile(logFile string, lastPos int64, newest bool) (*Pa
 
 	f, err := os.Open(logFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open log file :%v", err)
+		return nil, fmt.Errorf("failed to open log file :%w", err)
 	}
 	defer f.Close()
 	err = seekToPos(f, lastPos)
 	if err != nil {
-		return nil, fmt.Errorf("failed to seek log file :%v", err)
+		return nil, fmt.Errorf("failed to seek log file :%w", err)
 	}
 
 	rows, read, err := parser.scanFile(f, newest)
-	if err != nil && err != io.EOF {
-		return nil, fmt.Errorf("something wrong in parse log :%v", err)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("something wrong in parse log :%w", err)
 	}
 	curPos := lastPos + read
 
@@ -253,7 +253,7 @@ func (parser *Parser) parseFile(logFile string, lastPos int64, newest bool) (*Pa
 		if !parser.NoAutoCommitPosFile {
 			err = parser.posFile.write(curPos, fstat)
 			if err != nil {
-				return nil, fmt.Errorf("failed to update pos file :%v", err)
+				return nil, fmt.Errorf("failed to update pos file :%w", err)
 			}
 		}
 	}
@@ -276,13 +276,15 @@ func (parser *Parser) CommitPosFile() error {
 	}
 	err := parser.posFile.write(parser.lastPos, parser.lastfStat)
 	if err != nil {
-		return fmt.Errorf("failed to update pos file :%v", err)
+		return fmt.Errorf("failed to update pos file :%w", err)
 	}
 	return nil
 }
 
 // Ignore code complexity warning for this function, as it is a core part of the log parsing logic.
 // BEGIN-NOSCAN
+//
+//nolint:gocognit
 func (parser *Parser) scanFile(f io.Reader, newest bool) (int, int64, error) {
 	scan := 0
 	read := int64(0)

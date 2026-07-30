@@ -3,10 +3,12 @@ package followparser
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,7 +27,7 @@ func writeTestFile(path string, line string, count int) error {
 		return err
 	}
 	defer fh.Close()
-	for i := 0; i < count; i++ {
+	for range count {
 		if _, err := fh.WriteString(line); err != nil {
 			return err
 		}
@@ -35,7 +37,7 @@ func writeTestFile(path string, line string, count int) error {
 
 func benchScannerFile(b *testing.B, fname string) {
 	b.ReportAllocs()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		fh, err := os.Open(fname)
 		if err != nil {
 			b.Fatal(err)
@@ -57,8 +59,7 @@ func benchScannerFile(b *testing.B, fname string) {
 
 func benchScanFile(b *testing.B, fname string) {
 	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		fh, err := os.Open(fname)
 		if err != nil {
 			b.Fatal(err)
@@ -71,7 +72,7 @@ func benchScanFile(b *testing.B, fname string) {
 			MaxReadSize:  DefaultMaxReadSize,
 		}
 		_, _, err = p.scanFile(fh, true)
-		if err != nil && err != io.EOF {
+		if err != nil && !errors.Is(err, io.EOF) {
 			b.Fatal(err)
 		}
 		fh.Close()
@@ -144,14 +145,14 @@ func TestParse(t *testing.T) {
 	fh, err := os.Create(logFileName)
 	require.NoError(t, err, "failed to create log file")
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		buf := bytes.NewBufferString("")
 		parser := &testParser{
 			buf:      buf,
 			duration: 0,
 		}
 		msg := fmt.Sprintf("msg msg %08d\n", i)
-		fh.WriteString(msg)
+		_, _ = fh.WriteString(msg)
 		fp := &Parser{
 			WorkDir:  tmpdir,
 			Callback: parser,
@@ -168,14 +169,14 @@ func TestParse(t *testing.T) {
 
 	time.Sleep(time.Second)
 	msg3 := fmt.Sprintf("msg msg %08d\n", 3)
-	fh.WriteString(msg3)
+	_, _ = fh.WriteString(msg3)
 	fh.Close()
-	os.Rename(logFileName, filepath.Join(tmpdir, "log.1"))
+	_ = os.Rename(logFileName, filepath.Join(tmpdir, "log.1"))
 	fh, err = os.Create(logFileName)
 	require.NoError(t, err, "failed to create new log file")
 
 	msg4 := fmt.Sprintf("msg msg %08d\n", 4)
-	fh.WriteString(msg4)
+	_, _ = fh.WriteString(msg4)
 	buf := bytes.NewBufferString("")
 	parser := &testParser{
 		buf:      buf,
@@ -207,7 +208,7 @@ func TestParse(t *testing.T) {
 	require.NoError(t, err, "failed to open log file for appending")
 
 	msg5 := fmt.Sprintf("msg msg %08d\n", 5)
-	fh.WriteString(msg5)
+	_, _ = fh.WriteString(msg5)
 	fh.Close()
 	// Move log file to archive directory
 	archivedLog := filepath.Join(archiveDir, "log.2")
@@ -219,7 +220,7 @@ func TestParse(t *testing.T) {
 	require.NoError(t, err, "failed to create new log file")
 
 	msg6 := fmt.Sprintf("msg msg %08d\n", 6)
-	fh.WriteString(msg6)
+	_, _ = fh.WriteString(msg6)
 	fh.Close()
 	buf = bytes.NewBufferString("")
 	parser = &testParser{
@@ -248,17 +249,17 @@ func TestParseWithNoCommitPosFile(t *testing.T) {
 	fh, err := os.Create(logFileName)
 	require.NoError(t, err, "failed to create log file")
 
-	lastmsg := ""
+	lastmsg := strings.Builder{}
 	var fp *Parser
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		buf := bytes.NewBufferString("")
 		parser := &testParser{
 			buf:      buf,
 			duration: 0,
 		}
 		msg := fmt.Sprintf("msg msg %08d\n", i)
-		lastmsg += msg
-		fh.WriteString(msg)
+		lastmsg.WriteString(msg)
+		_, _ = fh.WriteString(msg)
 		fp = &Parser{
 			WorkDir:             tmpdir,
 			Callback:            parser,
@@ -268,7 +269,7 @@ func TestParseWithNoCommitPosFile(t *testing.T) {
 		require.NoError(t, err, "failed to parse log file with NoAutoCommitPosFile")
 
 		out := parser.Slurp().String()
-		require.Equal(t, lastmsg, out, "read output does not match expected")
+		require.Equal(t, lastmsg.String(), out, "read output does not match expected")
 		require.Len(t, r, 1, "result len must be 1")
 		require.Equal(t, i+1, r[0].Rows, "result[0].Rows must be i+1")
 		require.Equal(t, int64(17*(i+1)), r[0].EndPos-r[0].StartPos, "r[0].EndPos - r[0].StartPos must be 17*(i+1)")
@@ -283,7 +284,7 @@ func TestParseWithNoCommitPosFile(t *testing.T) {
 			duration: 0,
 		}
 		msg3 := fmt.Sprintf("msg msg %08d\n", 3)
-		fh.WriteString(msg3)
+		_, _ = fh.WriteString(msg3)
 		fp = &Parser{
 			WorkDir:             tmpdir,
 			Callback:            parser,
@@ -315,7 +316,7 @@ func TestParseAppendAfterNoTrailingNewline(t *testing.T) {
 	msgNoNLBefore := "msg "
 	_, err = fh.WriteString(previousMsg + msgNoNLBefore)
 	require.NoError(t, err, "failed to write initial content to log file")
-	fh.Sync()
+	_ = fh.Sync()
 
 	// First parse: should read the existing line (even without newline)
 	buf := bytes.NewBufferString("")
@@ -403,7 +404,7 @@ func TestRotateReadOldFileWithNoTrailingNewline(t *testing.T) {
 	msg1 := fmt.Sprintf("msg msg %08d\n", 30)
 	_, err = fh.WriteString(msg1)
 	require.NoError(t, err, "failed to write first line to log file")
-	fh.Sync()
+	_ = fh.Sync()
 
 	buf := bytes.NewBufferString("")
 	parser := &testParser{buf: buf}
@@ -456,12 +457,12 @@ func TestTruncated(t *testing.T) {
 
 	// write initial lines
 	var lines = 10
-	for i := 0; i < lines; i++ {
+	for i := range lines {
 		msg := fmt.Sprintf("msg msg %08d\n", i)
 		_, err = fh.WriteString(msg)
 		require.NoError(t, err, "failed to write initial content to log file")
 	}
-	fh.Sync()
+	_ = fh.Sync()
 
 	buf := bytes.NewBufferString("")
 	parser := &testParser{buf: buf}

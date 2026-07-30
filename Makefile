@@ -6,3 +6,6 @@ check:
 
 bench:
 	go test -bench . -benchmem ./...
+
+lint:
+	golangci-lint run ./...

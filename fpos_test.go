@@ -19,7 +19,9 @@ func init() {
 func TestPosFileRead(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "pos_file_test")
 	require.NoError(t, err, "failed to create temp directory")
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	tests := []struct {
 		name          string
@@ -61,7 +63,8 @@ func TestPosFileRead(t *testing.T) {
 			filename := path.Join(tmpDir, tc.name)
 			if tc.content != nil {
 				fileContent, _ := json.Marshal(tc.content)
-				os.WriteFile(filename, fileContent, 0666)
+				errWF := os.WriteFile(filename, fileContent, 0666)
+				require.NoError(t, errWF, "failed to write test content to file")
 			}
 
 			pf := newPosFile(filename)
@@ -81,7 +84,9 @@ func TestPosFileRead(t *testing.T) {
 func TestPosFileWrite(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "pos_file_test")
 	require.NoError(t, err, "failed to create temp directory")
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	tests := []struct {
 		name          string
@@ -110,7 +115,8 @@ func TestPosFileWrite(t *testing.T) {
 			if !tc.expectedError {
 				content, _ := os.ReadFile(filename)
 				readFPos := &fPos{}
-				json.Unmarshal(content, readFPos)
+				err := json.Unmarshal(content, readFPos)
+				require.NoError(t, err, "failed to unmarshal content")
 
 				require.Equal(t, tc.pos, readFPos.Pos, "pos expectation mismatch")
 				require.Equal(t, tc.fstat.Inode, readFPos.Inode, "inode expectation mismatch")
@@ -126,7 +132,9 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pos_file_test")
 	require.NoError(t, err, "failed to create temp directory")
-	defer os.RemoveAll(tmpDir)
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
 
 	filename := path.Join(tmpDir, "pos_file.json")
 	pf := newPosFile(filename)
@@ -144,7 +152,7 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 	ioErrs := make([]error, 0)
 	done := make(chan struct{})
 	go func() {
-		for i := 0; i < iterations; i++ {
+		for range iterations {
 			_, _, _, err := pf.read()
 			if err != nil {
 				mu.Lock()
@@ -156,7 +164,7 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 		close(done)
 	}()
 
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		pos := int64(1000 + i)
 		err := pf.write(pos, initialFStat)
 		if err != nil {
