@@ -86,6 +86,9 @@ func (parser *Parser) parseInit(logFile string) {
 	if parser.MaxReadSize == 0 {
 		parser.MaxReadSize = DefaultMaxReadSize
 	}
+	if parser.StartBufSize > parser.MaxBufSize {
+		parser.StartBufSize = parser.MaxBufSize
+	}
 	if parser.Callback == nil {
 		parser.Callback = &dummyParser{}
 	}
