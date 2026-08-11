@@ -24,7 +24,7 @@ jobs:
 
             - name: Run base benchmark
               run: |
-                  go test -bench BenchmarkScanFile -benchmem -count 5 -run '^$' . | tee base-bench.txt
+                  go test -bench BenchmarkScanFile -benchmem -count 5 -run '^$' . | tee /tmp/base-bench.txt
 
             - name: Checkout PR branch
               uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -39,6 +39,7 @@ jobs:
 
             - name: Run PR benchmark
               run: |
+                  cp /tmp/base-bench.txt ./base-bench.txt
                   go test -bench BenchmarkScanFile -benchmem -count 5 -run '^$' . | tee pr-bench.txt
 
             - name: Install benchstat
