@@ -42,7 +42,7 @@ jobs:
                   go test -bench BenchmarkScanFile -benchmem -count 5 -run '^$' . | tee pr-bench.txt
 
             - name: Install benchstat
-              run: go install golang.org/x/perf/cmd/benchstat@latest
+              run: go install golang.org/x/perf/cmd/benchstat@82a0b07e230d76fa1b3036c383d7a98172f87334
 
             - name: Compare benchmarks
               id: compare
