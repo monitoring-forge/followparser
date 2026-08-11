@@ -43,16 +43,18 @@ func (s *scanBuffer) flushTrailingLine(newest bool) {
 // scanNewlines parses all complete lines in buf[0:n] and returns the index
 // after the last newline that was consumed (or 0 if none were found).
 func (s *scanBuffer) scanNewlines(n int) int {
+	buf := s.buf[:n]
 	k := 0
 	for {
-		idx := bytes.IndexByte(s.buf[k:n], '\n')
+		idx := bytes.IndexByte(buf[k:], '\n')
 		if idx < 0 {
 			break
 		}
 		// found newline at k+idx
+		lineEnd := k + idx
 		s.read += int64(idx + 1)
-		s.parseLine(s.buf[k : k+idx])
-		k += idx + 1
+		s.parseLine(buf[k:lineEnd])
+		k = lineEnd + 1
 	}
 	return k
 }
