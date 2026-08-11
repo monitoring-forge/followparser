@@ -1,7 +1,6 @@
 package followparser
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -281,104 +280,32 @@ func (parser *Parser) CommitPosFile() error {
 	return nil
 }
 
-// Ignore code complexity warning for this function, as it is a core part of the log parsing logic.
-// BEGIN-NOSCAN
-//
-//nolint:gocognit
 func (parser *Parser) scanFile(f io.Reader, newest bool) (int, int64, error) {
-	scan := 0
-	read := int64(0)
-	buf := make([]byte, parser.StartBufSize)
-	offset := 0
+	sb := newScanBuffer(parser)
 	for {
-		nRead, err := f.Read(buf[offset:])
-		eof := false
+		nRead, eof, err := sb.readInto(f)
 		if err != nil {
-			if err == io.EOF {
-				eof = true
-			} else {
-				return scan, read, err
-			}
+			return sb.scan, sb.read, err
 		}
 
 		if nRead == 0 && eof {
-			// nothing more to read on this read call; if we have a leftover partial line
-			// in the buffer (offset > 0), process it according to the 'newest' flag.
-			if offset > 0 {
-				if !newest {
-					read += int64(offset)
-					if err := parser.Callback.Parse(buf[0:offset]); err != nil {
-						log.Printf("Failed to parse log :%v", err)
-					}
-					scan++
-				}
-			}
-			return scan, read, io.EOF
+			sb.flushTrailingLine(newest)
+			return sb.scan, sb.read, io.EOF
 		}
 
-		n := nRead + offset
-
-		// scan lines within buf[0:n]
-		k := 0
-		for {
-			idx := bytes.IndexByte(buf[k:n], '\n')
-			if idx < 0 {
-				break
-			}
-			// found newline at k+idx
-			read += int64(idx + 1)
-			if err := parser.Callback.Parse(buf[k : k+idx]); err != nil {
-				log.Printf("Failed to parse log :%v", err)
-			}
-			scan++
-			k += idx + 1
-		}
-
-		if k < n {
-			// remaining partial line in buffer
-			// move it to the head for next read
-			copy(buf[0:], buf[k:n])
-			offset = n - k
-		} else {
-			offset = 0
-		}
+		n := nRead + sb.offset
+		sb.processChunk(n)
 
 		if eof {
-			// if file ended and there is a remaining partial line
-			if offset > 0 {
-				if !newest {
-					// for rotated/old files, parse the final partial line
-					read += int64(offset)
-					if err := parser.Callback.Parse(buf[0:offset]); err != nil {
-						log.Printf("Failed to parse log :%v", err)
-					}
-					scan++
-				}
-			}
-			return scan, read, io.EOF
+			sb.flushTrailingLine(newest)
+			return sb.scan, sb.read, io.EOF
 		}
 
-		// current buffer is full
-		// If offset == n, then no newlines were found in the current buffer,
-		// so the entire buffer is a partial line. Continue reading or expand the buffer.
-		if offset == n {
-			// buffer is maxsize
-			if n == parser.MaxBufSize {
-				return scan, read, ErrTokenTooLong
+		// If the buffer is full with no newlines, expand and continue reading.
+		if sb.offset == n {
+			if expandErr := sb.expand(n); expandErr != nil {
+				return sb.scan, sb.read, expandErr
 			}
-			if n == len(buf) {
-				// expand buffer
-				newSize := len(buf) * 2
-				newSize = min(newSize, parser.MaxBufSize)
-				newBuf := make([]byte, newSize)
-				copy(newBuf, buf)
-				buf = newBuf
-			}
-			// continue reading into buffer at offset
-			continue
 		}
-		// otherwise there was at least one newline and possibly leftover, continue reading
 	}
 }
-
-// END-NOSCAN
