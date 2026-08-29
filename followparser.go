@@ -167,7 +167,7 @@ func currentUserID() int {
 func (parser *Parser) Parse(posFileName, logFile string) ([]Parsed, error) {
 	parser.parseInit(logFile)
 
-	parser.posFile = newPosFile(filepath.Join(parser.WorkDir, fmt.Sprintf("%s-%d", posFileName, currentUserID())))
+	parser.posFile = newPosFile(parser.WorkDir, fmt.Sprintf("%s-%d", posFileName, currentUserID()))
 	lastPos, duration, lastFstat, err := parser.posFile.read()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load pos file :%w", err)

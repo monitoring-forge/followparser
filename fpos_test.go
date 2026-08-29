@@ -1,15 +1,14 @@
 package followparser
 
 import (
-	"encoding/json"
 	"io"
 	"log"
 	"os"
-	"path"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/monitoring-forge/saferio"
 	"github.com/stretchr/testify/require"
 )
 
@@ -60,14 +59,12 @@ func TestPosFileRead(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			filename := path.Join(tmpDir, tc.name)
 			if tc.content != nil {
-				fileContent, _ := json.Marshal(tc.content)
-				errWF := os.WriteFile(filename, fileContent, 0666)
+				errWF := saferio.WriteJSON(tmpDir, tc.name, tc.content)
 				require.NoError(t, errWF, "failed to write test content to file")
 			}
 
-			pf := newPosFile(filename)
+			pf := newPosFile(tmpDir, tc.name)
 			pos, _, fstat, err := pf.read()
 			require.Equal(t, tc.expectedError, err != nil, "error expectation mismatch")
 			require.Equal(t, tc.expectedPos, pos, "pos expectation mismatch")
@@ -107,15 +104,13 @@ func TestPosFileWrite(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			filename := path.Join(tmpDir, "pos_file.json")
-			pf := newPosFile(filename)
+			pf := newPosFile(tmpDir, "pos_file.json")
 			err := pf.write(tc.pos, tc.fstat)
 			require.Equal(t, tc.expectedError, err != nil, "error expectation mismatch")
 
 			if !tc.expectedError {
-				content, _ := os.ReadFile(filename)
 				readFPos := &fPos{}
-				err := json.Unmarshal(content, readFPos)
+				err := saferio.ReadJSON(pf.workDir, pf.filename, readFPos)
 				require.NoError(t, err, "failed to unmarshal content")
 
 				require.Equal(t, tc.pos, readFPos.Pos, "pos expectation mismatch")
@@ -136,8 +131,7 @@ func TestPosFileConcurrentReadAndWrite(t *testing.T) {
 		_ = os.RemoveAll(tmpDir)
 	}()
 
-	filename := path.Join(tmpDir, "pos_file.json")
-	pf := newPosFile(filename)
+	pf := newPosFile(tmpDir, "pos_file.json")
 
 	initialPos := int64(789)
 	initialFStat := &fStat{
