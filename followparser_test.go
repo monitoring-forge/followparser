@@ -1,11 +1,10 @@
 package followparser
 
 import (
-	"bufio"
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +13,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
+
+func init() {
+	log.SetOutput(io.Discard)
+}
 
 type testParser struct {
 	buf      *bytes.Buffer
@@ -33,96 +36,6 @@ func writeTestFile(path string, line string, count int) error {
 		}
 	}
 	return fh.Sync()
-}
-
-func benchScannerFile(b *testing.B, fname string) {
-	b.ReportAllocs()
-	for range b.N {
-		fh, err := os.Open(fname)
-		if err != nil {
-			b.Fatal(err)
-		}
-		parser := &dummyParser{}
-		scanner := bufio.NewScanner(fh)
-		scanner.Buffer(make([]byte, DefaultStartBufSize), DefaultMaxBufSize)
-		for scanner.Scan() {
-			if err := parser.Parse(scanner.Bytes()); err != nil {
-				b.Fatal(err)
-			}
-		}
-		if err := scanner.Err(); err != nil {
-			b.Fatal(err)
-		}
-		fh.Close()
-	}
-}
-
-func benchScanFile(b *testing.B, fname string) {
-	b.ReportAllocs()
-	for range b.N {
-		fh, err := os.Open(fname)
-		if err != nil {
-			b.Fatal(err)
-		}
-		parser := &dummyParser{}
-		p := &Parser{
-			Callback:     parser,
-			StartBufSize: DefaultStartBufSize,
-			MaxBufSize:   DefaultMaxBufSize,
-			MaxReadSize:  DefaultMaxReadSize,
-		}
-		_, _, err = p.scanFile(fh, true)
-		if err != nil && !errors.Is(err, io.EOF) {
-			b.Fatal(err)
-		}
-		fh.Close()
-	}
-}
-
-func BenchmarkScanner_SmallLines(b *testing.B) {
-	dir := b.TempDir()
-	fname := filepath.Join(dir, "small.log")
-	line := "short line example\n"
-	// ~10k lines
-	if err := writeTestFile(fname, line, 10000); err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-	benchScannerFile(b, fname)
-}
-
-func BenchmarkScanFile_SmallLines(b *testing.B) {
-	dir := b.TempDir()
-	fname := filepath.Join(dir, "small.log")
-	line := "short line example\n"
-	if err := writeTestFile(fname, line, 10000); err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-	benchScanFile(b, fname)
-}
-
-func BenchmarkScanner_LongLine(b *testing.B) {
-	dir := b.TempDir()
-	fname := filepath.Join(dir, "long.log")
-	longLine := string(bytes.Repeat([]byte("A"), DefaultStartBufSize+100)) + "\n"
-	// single long line
-	if err := writeTestFile(fname, longLine, 1); err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-	benchScannerFile(b, fname)
-}
-
-func BenchmarkScanFile_LongLine(b *testing.B) {
-	dir := b.TempDir()
-	fname := filepath.Join(dir, "long.log")
-	longLine := string(bytes.Repeat([]byte("A"), DefaultStartBufSize+100)) + "\n"
-	if err := writeTestFile(fname, longLine, 1); err != nil {
-		b.Fatal(err)
-	}
-	b.ResetTimer()
-	benchScanFile(b, fname)
 }
 
 func (p *testParser) Parse(b []byte) error {
@@ -497,4 +410,74 @@ func TestTruncated(t *testing.T) {
 	require.Equal(t, expected, out, "truncated read output does not match expected")
 	require.Len(t, r2, 1, "truncated result len must be 1")
 	require.Equal(t, 1, r2[0].Rows, "truncated result[0].Rows must be 1")
+}
+
+// TestParseSymlinkSameDir verifies that parsing works when logFile is a
+// symlink pointing to the actual log file in the same directory, including
+// rotation detection when the symlink target changes.
+func TestParseSymlinkSameDir(t *testing.T) {
+	tmpdir := t.TempDir()
+
+	// Create the initial actual log file and a symlink to it.
+	actualLog1 := filepath.Join(tmpdir, "access_log.20260828")
+	symlinkLog := filepath.Join(tmpdir, "access.log")
+	fh, err := os.Create(actualLog1)
+	require.NoError(t, err, "failed to create initial actual log file")
+
+	err = os.Symlink(actualLog1, symlinkLog)
+	require.NoError(t, err, "failed to create symlink to initial log file")
+
+	msg1 := fmt.Sprintf("msg msg %08d\n", 1)
+	_, err = fh.WriteString(msg1)
+	require.NoError(t, err, "failed to write to initial actual log file")
+	fh.Close()
+
+	// First parse: should read through the symlink.
+	buf := bytes.NewBufferString("")
+	parser := &testParser{buf: buf}
+	fp := &Parser{
+		WorkDir:  tmpdir,
+		Callback: parser,
+		Silent:   true,
+	}
+	r, err := fp.Parse("logPosSymlink", symlinkLog)
+	require.NoError(t, err, "failed to parse symlinked log file")
+	require.Equal(t, msg1, parser.Slurp().String(), "first read output does not match expected")
+	require.Len(t, r, 1, "first result len must be 1")
+	require.Equal(t, 1, r[0].Rows, "first result[0].Rows must be 1")
+
+	// Simulate rotation: create a new actual log file and repoint the symlink.
+	actualLog2 := filepath.Join(tmpdir, "access_log.20260829")
+	fh, err = os.Create(actualLog2)
+	require.NoError(t, err, "failed to create rotated actual log file")
+
+	msg2 := fmt.Sprintf("msg msg %08d\n", 2)
+	_, err = fh.WriteString(msg2)
+	require.NoError(t, err, "failed to write to rotated actual log file")
+	fh.Close()
+
+	err = os.Remove(symlinkLog)
+	require.NoError(t, err, "failed to remove old symlink")
+	err = os.Symlink(actualLog2, symlinkLog)
+	require.NoError(t, err, "failed to create symlink to rotated log file")
+
+	// Second parse: should detect rotation and read from the new symlink target.
+	buf2 := bytes.NewBufferString("")
+	parser2 := &testParser{buf: buf2}
+	fp2 := &Parser{
+		WorkDir:    tmpdir,
+		Callback:   parser2,
+		ArchiveDir: tmpdir,
+		Silent:     true,
+	}
+	r2, err := fp2.Parse("logPosSymlink", symlinkLog)
+	require.NoError(t, err, "failed to parse after symlink rotation")
+	// Rotation is detected because the symlink now points at a different inode.
+	// The previous target is still present in ArchiveDir (same as tmpdir here),
+	// so parseRotated also parses it, but it contributes zero new rows because
+	// it was already fully read.
+	require.Equal(t, msg2, parser2.Slurp().String(), "second read output does not match expected")
+	require.Len(t, r2, 2, "second result len must be 2")
+	require.Equal(t, 0, r2[0].Rows, "second result[0].Rows must be 0 (old file already fully read)")
+	require.Equal(t, 1, r2[1].Rows, "second result[1].Rows must be 1")
 }

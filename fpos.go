@@ -1,14 +1,10 @@
 package followparser
 
 import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/avast/retry-go/v4"
+	"github.com/monitoring-forge/saferio"
 )
 
 type fPos struct {
@@ -18,22 +14,20 @@ type fPos struct {
 	Dev   uint64  `json:"dev"`
 }
 
-type fStat struct {
-	Inode uint64
-	Dev   uint64
-	Size  int64
-}
-
 type posFile struct {
+	workDir  string
 	filename string
 }
 
-func newPosFile(filename string) *posFile {
-	return &posFile{filename}
+func newPosFile(workdir, filename string) *posFile {
+	return &posFile{
+		workDir:  workdir,
+		filename: filename,
+	}
 }
 
 func (pf *posFile) read() (int64, float64, *fStat, error) {
-	s, err := os.Stat(pf.filename)
+	s, err := saferio.Stat(pf.workDir, pf.filename)
 	if err != nil || s.Size() == 0 {
 		return 0, 0, nil, nil
 	}
@@ -41,11 +35,7 @@ func (pf *posFile) read() (int64, float64, *fStat, error) {
 	fp := fPos{}
 	err = retry.Do(
 		func() error {
-			d, err := os.ReadFile(pf.filename)
-			if err != nil {
-				return err
-			}
-			err = json.Unmarshal(d, &fp)
+			err := saferio.ReadJSON(pf.workDir, pf.filename, &fp)
 			if err != nil {
 				return err
 			}
@@ -77,70 +67,5 @@ func (pf *posFile) write(pos int64, fstat *fStat) error {
 		Inode: fstat.Inode,
 		Dev:   fstat.Dev,
 	}
-	jb, err := json.Marshal(fp)
-	if err != nil {
-		return err
-	}
-	// To avoid race condition, we create a temporary file and then rename it to the target filename.
-	f, err := os.CreateTemp(filepath.Dir(pf.filename), filepath.Base(pf.filename))
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	_, err = f.Write(jb)
-	if err != nil {
-		return err
-	}
-	err = f.Sync()
-	if err != nil {
-		return err
-	}
-	err = f.Close()
-	if err != nil {
-		return err
-	}
-	return os.Rename(f.Name(), pf.filename)
-}
-
-func fileStat(filename string) (*fStat, error) {
-	s, err := os.Stat(filename)
-	if err != nil {
-		return nil, err
-	}
-	s2 := s.Sys().(*syscall.Stat_t)
-	if s2 == nil {
-		return nil, fmt.Errorf("could not get inode")
-	}
-	return &fStat{
-		Inode: s2.Ino,
-		Dev:   uint64(s2.Dev),
-		Size:  s.Size(),
-	}, nil
-}
-
-func (fstat *fStat) isNotRotated(lastFstat *fStat) bool {
-	if lastFstat == nil {
-		return true
-	}
-	return lastFstat.Inode == 0 || lastFstat.Dev == 0 || (fstat.Inode == lastFstat.Inode && fstat.Dev == lastFstat.Dev)
-}
-
-func (fstat *fStat) searchFileByInode(d string) (string, error) {
-	files, err := os.ReadDir(d)
-	if err != nil {
-		return "", err
-	}
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-		s, err := fileStat(filepath.Join(d, file.Name()))
-		if err != nil {
-			continue
-		}
-		if s.Inode == fstat.Inode && s.Dev == fstat.Dev {
-			return filepath.Join(d, file.Name()), nil
-		}
-	}
-	return "", fmt.Errorf("there is no file by inode:%d in %s", fstat.Inode, d)
+	return saferio.WriteJSON(pf.workDir, pf.filename, fp)
 }
