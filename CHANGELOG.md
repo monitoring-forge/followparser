@@ -1,5 +1,17 @@
 # Changelog
 
+## [v0.2.16](https://github.com/monitoring-forge/followparser/compare/v0.2.15...v0.2.16) - 2026-08-29
+
+- add lint and fix some issue by @kazeburo in https://github.com/monitoring-forge/followparser/pull/57
+- Sync files with `monitoring-forge/github-common` by @monitoring-forge-files-sync-action[bot] in https://github.com/monitoring-forge/followparser/pull/59
+- Sync files with `monitoring-forge/github-common` by @monitoring-forge-files-sync-action[bot] in https://github.com/monitoring-forge/followparser/pull/60
+- refactor: implement scanBuffer for improved file scanning logic and add benchmarks by @kazeburo in https://github.com/monitoring-forge/followparser/pull/61
+- ci: bump the dependencies group across 1 directory with 2 updates by @dependabot[bot] in https://github.com/monitoring-forge/followparser/pull/65
+- go: bump github.com/stretchr/testify from 1.11.1 to 1.12.0 in the dependencies group by @dependabot[bot] in https://github.com/monitoring-forge/followparser/pull/64
+- Sync files with `monitoring-forge/github-common` by @monitoring-forge-files-sync-action[bot] in https://github.com/monitoring-forge/followparser/pull/66
+- feat: add fstat functionality and corresponding tests; refactor posFi… by @kazeburo in https://github.com/monitoring-forge/followparser/pull/69
+- ci: bump the-pr-agent/pr-agent from 0.42.0 to 0.43.0 in the dependencies group by @dependabot[bot] in https://github.com/monitoring-forge/followparser/pull/68
+
 ## [v0.2.15](https://github.com/monitoring-forge/followparser/compare/v0.2.14...v0.2.15) - 2026-07-28
 
 - ci: bump the dependencies group with 3 updates by @dependabot[bot] in https://github.com/monitoring-forge/followparser/pull/49
