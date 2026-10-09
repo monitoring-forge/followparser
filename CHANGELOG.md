@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.2.17](https://github.com/monitoring-forge/followparser/compare/v0.2.16...v0.2.17) - 2026-10-09
+
+- ci: bump the dependencies group across 1 directory with 2 updates by @dependabot[bot] in https://github.com/monitoring-forge/followparser/pull/72
+- Sync files with `monitoring-forge/github-common` by @monitoring-forge-files-sync-action[bot] in https://github.com/monitoring-forge/followparser/pull/70
+- ci: bump Songmu/tagpr from 1.20.3 to 1.21.0 in the dependencies group by @dependabot[bot] in https://github.com/monitoring-forge/followparser/pull/74
+- Sync files with `monitoring-forge/github-common` by @monitoring-forge-files-sync-action[bot] in https://github.com/monitoring-forge/followparser/pull/75
+- ci: bump Songmu/tagpr from 1.21.0 to 1.21.1 in the tagpr group by @dependabot[bot] in https://github.com/monitoring-forge/followparser/pull/77
+
 ## [v0.2.16](https://github.com/monitoring-forge/followparser/compare/v0.2.15...v0.2.16) - 2026-08-29
 
 - add lint and fix some issue by @kazeburo in https://github.com/monitoring-forge/followparser/pull/57
